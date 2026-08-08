@@ -1,3 +1,4 @@
+from time import sleep
 from pathlib import Path
 import tensorflow as tf
 import pandas as pd
@@ -8,6 +9,7 @@ from scipy.io import wavfile
 # pyrefly: ignore [missing-import]
 from IPython.display import Audio
 
+min_note = 36
 
 def load_data(input_files):
 
@@ -19,6 +21,46 @@ def load_data(input_files):
 
     print("Data Loaded ✅ .. !")
     return data_list
+
+
+
+def create_target(batch):
+    X = batch[:, :-1]
+    Y = batch[:, 1:] # predict next note in each arpegio, at each step
+    return X, Y
+
+def preprocess(window):
+    window = tf.where(window == 0, window, window - min_note + 1) # shift values
+    return tf.reshape(window, [-1]) # convert to arpegio
+
+def bach_dataset(chorales, batch_size=32, shuffle_buffer_size=None,
+                 window_size=32, window_shift=16, cache=True):
+    def batch_window(window):
+        return window.batch(window_size + 1)
+
+    def to_windows(chorale):
+        dataset = tf.data.Dataset.from_tensor_slices(chorale)
+        dataset = dataset.window(window_size + 1, window_shift, drop_remainder=True)
+        return dataset.flat_map(batch_window)
+
+    print("Creating dataset .......")
+    for i in range(3, 0, -1):
+        print(i, end="...", flush=True)
+        sleep(0.3)
+
+    chorales = tf.ragged.constant(chorales, ragged_rank=1)
+    dataset = tf.data.Dataset.from_tensor_slices(chorales)
+    dataset = dataset.flat_map(to_windows).map(preprocess)
+    if cache:
+        dataset = dataset.cache()
+    if shuffle_buffer_size:
+        dataset = dataset.shuffle(shuffle_buffer_size)
+    dataset = dataset.batch(batch_size)
+    dataset = dataset.map(create_target)
+
+    print("Dataset created ✅")
+    return dataset.prefetch(1)
+
 
 
 
@@ -57,3 +99,4 @@ def play_chords(chords, tempo=160, amplitude=0.1, sample_rate=44100, filepath=No
         return display(Audio(filepath))
     else:
         return display(Audio(samples, rate=sample_rate))
+
