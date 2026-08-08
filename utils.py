@@ -100,3 +100,26 @@ def play_chords(chords, tempo=160, amplitude=0.1, sample_rate=44100, filepath=No
     else:
         return display(Audio(samples, rate=sample_rate))
 
+
+
+def generate_chorale(model, seed_chords, length):
+    arpegio = preprocess(tf.constant(seed_chords, dtype=tf.int64))
+    arpegio = tf.reshape(arpegio, [1, -1])
+    for chord in range(length):
+        for note in range(4):
+            next_note = model.predict(arpegio, verbose=0).argmax(axis=-1)[:1, -1:]
+            arpegio = tf.concat([arpegio, next_note], axis=1)
+    arpegio = tf.where(arpegio == 0, arpegio, arpegio + min_note - 1)
+    return tf.reshape(arpegio, shape=[-1, 4])
+
+def generate_chorale_v2(model, seed_chords, length, temperature=1):
+    arpegio = preprocess(tf.constant(seed_chords, dtype=tf.int64))
+    arpegio = tf.reshape(arpegio, [1, -1])
+    for chord in range(length):
+        for note in range(4):
+            next_note_probas = model.predict(arpegio)[0, -1:]
+            rescaled_logits = tf.math.log(next_note_probas) / temperature
+            next_note = tf.random.categorical(rescaled_logits, num_samples=1)
+            arpegio = tf.concat([arpegio, next_note], axis=1)
+    arpegio = tf.where(arpegio == 0, arpegio, arpegio + min_note - 1)
+    return tf.reshape(arpegio, shape=[-1, 4])
